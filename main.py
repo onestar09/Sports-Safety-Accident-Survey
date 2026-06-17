@@ -1,341 +1,158 @@
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
 import plotly.express as px
-from collections import Counter
-import warnings
-warnings.filterwarnings('ignore')
 
-st.set_page_config(page_title="스포츠 안전사고 분석", layout="wide", initial_sidebar_state="expanded")
+# 1. 페이지 기본 설정
+st.set_page_config(
+    page_title="2024 스포츠 안전사고 실태조사 대시보드",
+    page_icon="⛑️",
+    layout="wide"
+)
 
+# 2. 데이터 로드 함수 (캐싱 처리로 속도 최적화)
 @st.cache_data
 def load_data():
-    file_path = '_Rawdata__2024_스포츠_안전사고_실태조사_체육인___1_.xlsx'
-    df = pd.read_excel(file_path, sheet_name='DATA', header=None)
+    # 데이터 불러오기 (첫 2개 행이 다중 헤더 구조이므로 2번째 행을 기준으로 읽거나 적절히 처리)
+    # 한글 깨짐 방지를 위해 cp949 또는 utf-8-sig 사용
+    try:
+        df = pd.read_csv("2024_스포츠_안전사고_실태조사_체육인.csv", header=1)
+    except UnicodeDecodeError:
+        df = pd.read_csv("2024_스포츠_안전사고_실태조사_체육인.csv", header=1, encoding='cp949')
     
-    # 헤더 설정 (2번째 행)
-    headers = df.iloc[2].tolist()
-    df = df.iloc[3:].reset_index(drop=True)
-    df.columns = headers
-    df = df.fillna(0)
-    
+    # 컬럼명 공백 제거
+    df.columns = df.columns.str.strip()
     return df
 
-@st.cache_data
-def load_guide():
-    file_path = '_Rawdata__2024_스포츠_안전사고_실태조사_체육인___1_.xlsx'
-    guide = pd.read_excel(file_path, sheet_name='GUIDE')
-    return guide
-
+# 데이터 로드 안내
 try:
     df = load_data()
-    guide = load_guide()
-    
-    # 주요 변수 추출
-    sq1 = pd.to_numeric(df['SQ1'], errors='coerce')  # 체육인 구분
-    sq3 = pd.to_numeric(df['SQ3'], errors='coerce')  # 성별
-    sq4 = pd.to_numeric(df['SQ4'], errors='coerce')  # 연령
-    
-    # 부상 경험 컬럼 찾기
-    injury_cols = [col for col in df.columns if '부상' in str(col) and '경험' in str(col)]
-    safety_cols = [col for col in df.columns if '안전' in str(col) and ('교육' in str(col) or '인식' in str(col))]
-    
-    st.sidebar.title("📊 네비게이션")
-    page = st.sidebar.radio("페이지 선택", ["🏠 홈", "🩹 부상 분석", "👥 인구통계 분석", "📚 안전 인식", "🔍 데이터 검증"])
-    
-    if page == "🏠 홈":
-        st.title("2024 스포츠 안전사고 실태조사")
-        st.markdown("### 체육인 대상 종합 분석 대시보드")
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("📈 총 응답자", f"{len(df):,}명")
-        with col2:
-            st.metric("🏆 조사 대상", "체육인")
-        with col3:
-            st.metric("📅 조사 연도", "2024년")
-        
-        st.markdown("---")
-        
-        st.subheader("📋 프로젝트 개요")
-        st.markdown("""
-        이 대시보드는 **실제 데이터(raw data)**를 활용하여 스포츠 안전사고 현황을 분석합니다.
-        
-        #### 🎯 4가지 핵심 분석 주제
-        
-        1. **🩹 부상 분석** - 스포츠 종목별 부상 발생 현황
-        2. **👥 인구통계 분석** - 나이, 성별, 소속팀 유형에 따른 부상 위험도
-        3. **📚 안전 인식** - 체육인의 안전교육 경험 및 인식도
-        4. **🔍 데이터 검증** - 데이터 품질 검증 및 신뢰도 평가
-        """)
-        
-        st.markdown("---")
-        
-        st.subheader("✨ 주요 특징")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.info("""
-            #### 📊 데이터 리터러시
-            - 10,000+ 실제 응답자 데이터 활용
-            - 다중선택 변수 처리
-            - 결측치 분석 및 처리
-            """)
-        
-        with col2:
-            st.info("""
-            #### 🤔 비판적 사고력
-            - 표본 신뢰도 검증
-            - 이상치 탐지 및 분석
-            - AI 오류 검증 프로세스
-            """)
-        
-        st.markdown("---")
-        
-        st.subheader("🚀 사용 가이드")
-        st.markdown("""
-        1. **좌측 메뉴**에서 원하는 분석 페이지 선택
-        2. **필터 옵션**으로 특정 집단 분석
-        3. **차트 상호작용** - 마우스로 드래그/줌 가능
-        4. **다운로드** - 차트 우측 상단 카메라 아이콘 사용
-        """)
-        
-        st.markdown("---")
-        
-        st.info("📌 **좌측 메뉴**에서 각 분석 페이지를 확인할 수 있습니다!")
-    
-    elif page == "🩹 부상 분석":
-        st.title("🩹 부상 경험 분석")
-        
-        if injury_cols:
-            injury_col = injury_cols[0]
-            injury_data = pd.to_numeric(df[injury_col], errors='coerce')
-            
-            injury_rate = (injury_data == 1).sum() / len(injury_data[injury_data.notna()]) * 100
-            
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("부상 경험자", f"{(injury_data == 1).sum():,}명")
-            with col2:
-                st.metric("부상 경험률", f"{injury_rate:.1f}%")
-            with col3:
-                st.metric("응답자(검증됨)", f"{len(injury_data[injury_data.notna()]):,}명")
-            
-            st.markdown("---")
-            
-            # 성별별 부상률
-            st.subheader("성별별 부상 경험률")
-            injury_by_gender = df[df[injury_col].notna()].groupby(sq3.astype(int))[[injury_col]].apply(
-                lambda x: (pd.to_numeric(x[injury_col], errors='coerce') == 1).sum() / len(x)
-            ) * 100
-            
-            gender_map = {1: "남성", 2: "여성"}
-            injury_by_gender.index = injury_by_gender.index.map(gender_map)
-            
-            fig = go.Figure()
-            fig.add_trace(go.Bar(x=injury_by_gender.index, y=injury_by_gender.values, 
-                                text=[f'{x:.1f}%' for x in injury_by_gender.values],
-                                textposition='outside', marker_color=['#3498db', '#e74c3c']))
-            fig.update_layout(title="성별 부상 경험률 비교", xaxis_title="성별", yaxis_title="부상 경험률 (%)",
-                            height=400, showlegend=False)
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # 연령대별 부상률
-            st.subheader("연령대별 부상 경험률")
-            injury_by_age = df[df[injury_col].notna()].groupby(sq4.astype(int))[[injury_col]].apply(
-                lambda x: (pd.to_numeric(x[injury_col], errors='coerce') == 1).sum() / len(x)
-            ) * 100
-            
-            age_map = {1: "12세↓", 2: "13-18", 3: "19-29", 4: "30대", 5: "40대", 6: "50대", 7: "60-64", 8: "65+"}
-            injury_by_age.index = injury_by_age.index.map(age_map)
-            
-            fig = go.Figure()
-            fig.add_trace(go.Bar(x=injury_by_age.index, y=injury_by_age.values,
-                                text=[f'{x:.1f}%' for x in injury_by_age.values],
-                                textposition='outside', marker_color='#f39c12'))
-            fig.update_layout(title="연령대별 부상 경험률", xaxis_title="연령대", yaxis_title="부상 경험률 (%)",
-                            height=400, showlegend=False)
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # 체육인 구분별 부상률
-            st.subheader("체육인 유형별 부상 경험률")
-            injury_by_type = df[df[injury_col].notna()].groupby(sq1.astype(int))[[injury_col]].apply(
-                lambda x: (pd.to_numeric(x[injury_col], errors='coerce') == 1).sum() / len(x)
-            ) * 100
-            
-            type_map = {1: "생활체육인", 2: "전문체육인"}
-            injury_by_type.index = injury_by_type.index.map(type_map)
-            
-            fig = go.Figure()
-            fig.add_trace(go.Bar(x=injury_by_type.index, y=injury_by_type.values,
-                                text=[f'{x:.1f}%' for x in injury_by_type.values],
-                                textposition='outside', marker_color=['#2ecc71', '#9b59b6']))
-            fig.update_layout(title="체육인 유형별 부상 경험률", xaxis_title="유형", yaxis_title="부상 경험률 (%)",
-                            height=400, showlegend=False)
-            st.plotly_chart(fig, use_container_width=True)
-        
-        else:
-            st.warning("부상 관련 데이터를 찾을 수 없습니다.")
-    
-    elif page == "👥 인구통계 분석":
-        st.title("👥 인구통계 교차 분석")
-        
-        if injury_cols:
-            injury_col = injury_cols[0]
-            
-            st.subheader("성별 × 연령대 교차 분석")
-            
-            cross_data = []
-            for age in sorted(sq4.dropna().unique()):
-                for gender in sorted(sq3.dropna().unique()):
-                    mask = (sq3 == gender) & (sq4 == age)
-                    if mask.sum() > 0:
-                        injury_rate = (pd.to_numeric(df.loc[mask, injury_col], errors='coerce') == 1).sum() / mask.sum() * 100
-                        cross_data.append({
-                            '연령대': age,
-                            '성별': gender,
-                            '부상률': injury_rate,
-                            '응답자': mask.sum()
-                        })
-            
-            if cross_data:
-                cross_df = pd.DataFrame(cross_data)
-                cross_df['연령대'] = cross_df['연령대'].map({1: "12세↓", 2: "13-18", 3: "19-29", 4: "30대", 
-                                                              5: "40대", 6: "50대", 7: "60-64", 8: "65+"})
-                cross_df['성별'] = cross_df['성별'].map({1: "남성", 2: "여성"})
-                
-                fig = px.bar(cross_df, x='연령대', y='부상률', color='성별',
-                           barmode='group', title="성별 × 연령대 부상률 교차분석",
-                           labels={'부상률': '부상 경험률 (%)'})
-                st.plotly_chart(fig, use_container_width=True)
-                
-                st.markdown("---")
-                st.subheader("교차분석 테이블")
-                pivot_table = cross_df.pivot(index='연령대', columns='성별', values='부상률')
-                st.dataframe(pivot_table.style.format("{:.1f}%"), use_container_width=True)
-    
-    elif page == "📚 안전 인식":
-        st.title("📚 스포츠 안전 인식")
-        
-        if safety_cols:
-            st.subheader("안전교육 경험 현황")
-            
-            education_results = {}
-            for col in safety_cols[:3]:  # 첫 3개 안전 관련 컬럼
-                data = pd.to_numeric(df[col], errors='coerce')
-                yes_count = (data == 1).sum()
-                total = len(data[data.notna()])
-                if total > 0:
-                    education_results[col] = {
-                        '경험': yes_count,
-                        '비경험': total - yes_count,
-                        '경험률': yes_count / total * 100
-                    }
-            
-            if education_results:
-                col1, col2, col3 = st.columns(3)
-                for idx, (key, val) in enumerate(education_results.items()):
-                    if idx == 0:
-                        col1.metric("안전교육 경험률", f"{val['경험률']:.1f}%")
-                    elif idx == 1:
-                        col2.metric("안전 인식 긍정률", f"{val['경험률']:.1f}%")
-                    else:
-                        col3.metric("안전정보 획득률", f"{val['경험률']:.1f}%")
-                
-                st.markdown("---")
-                
-                # 안전교육과 부상의 관계
-                if injury_cols:
-                    st.subheader("안전교육 경험 여부에 따른 부상률")
-                    injury_col = injury_cols[0]
-                    education_col = safety_cols[0]
-                    
-                    education_injury = df.groupby(
-                        pd.to_numeric(df[education_col], errors='coerce')
-                    )[[injury_col]].apply(
-                        lambda x: (pd.to_numeric(x[injury_col], errors='coerce') == 1).sum() / len(x)
-                    ) * 100
-                    
-                    education_injury.index = education_injury.index.map({1: "교육 경험 있음", 2: "교육 경험 없음"})
-                    
-                    fig = go.Figure()
-                    fig.add_trace(go.Bar(x=education_injury.index, y=education_injury.values,
-                                        text=[f'{x:.1f}%' for x in education_injury.values],
-                                        textposition='outside', marker_color=['#27ae60', '#e67e22']))
-                    fig.update_layout(title="안전교육 경험 여부에 따른 부상률",
-                                    xaxis_title="안전교육 경험", yaxis_title="부상 경험률 (%)",
-                                    height=400, showlegend=False)
-                    st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("안전 인식 관련 데이터를 분석 중입니다...")
-    
-    elif page == "🔍 데이터 검증":
-        st.title("🔍 데이터 품질 검증")
-        
-        st.subheader("📊 데이터 기본 통계")
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("전체 행 수", f"{len(df):,}")
-        with col2:
-            st.metric("전체 열 수", f"{len(df.columns)}")
-        with col3:
-            st.metric("메모리 사용량", f"{df.memory_usage(deep=True).sum() / 1024**2:.1f} MB")
-        with col4:
-            st.metric("응답률(추정)", "99.5%")
-        
-        st.markdown("---")
-        
-        st.subheader("✅ 검증 체크리스트")
-        st.success("✓ 표본 신뢰도: n=10,003 (95% 신뢰도, 오차범위 ±1%)")
-        st.success("✓ 데이터 완정성: 주요 변수 결측률 <5%")
-        st.success("✓ 이상치 검증: 부상률 범위 2~15% (정상 범위)")
-        st.success("✓ 논리적 일관성: 연령대별 부상률 일관성 확인")
-        st.warning("⚠️ 다중선택 변수 주의: SQ2(스포츠 종목)는 복수 응답 가능")
-        
-        st.markdown("---")
-        
-        st.subheader("📈 주요 변수 분포 검증")
-        
-        fig = go.Figure()
-        
-        # 성별 분포
-        gender_dist = sq3.value_counts()
-        gender_dist.index = gender_dist.index.map({1: "남성", 2: "여성"})
-        
-        fig.add_trace(go.Bar(x=gender_dist.index, y=gender_dist.values, 
-                            text=gender_dist.values, textposition='outside',
-                            name='응답자 수', marker_color='#3498db'))
-        
-        fig.update_layout(title="응답자 성별 분포 검증",
-                         xaxis_title="성별", yaxis_title="응답자 수",
-                         height=400, showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # 연령대 분포
-        st.subheader("연령대별 응답자 분포")
-        age_dist = sq4.value_counts().sort_index()
-        age_map = {1: "12세↓", 2: "13-18", 3: "19-29", 4: "30대", 5: "40대", 6: "50대", 7: "60-64", 8: "65+"}
-        age_dist.index = age_dist.index.map(age_map)
-        
-        fig = go.Figure()
-        fig.add_trace(go.Pie(labels=age_dist.index, values=age_dist.values,
-                            textposition='inside', textinfo='label+percent'))
-        fig.update_layout(title="연령대별 응답자 분포", height=500)
-        st.plotly_chart(fig, use_container_width=True)
-        
-        st.markdown("---")
-        
-        st.subheader("🔍 AI 오류 검증")
-        st.info("""
-        **수행한 검증:**
-        - ✓ 코드북 기반 변수 매핑 (환각 방지)
-        - ✓ 부상률 범위 검증 (0~100%)
-        - ✓ 성별/연령 코드 검증 (1-8 범위)
-        - ✓ 응답자 수 일관성 검증
-        
-        **발견된 문제:** 없음 (정상 범위 내)
-        """)
-
 except Exception as e:
-    st.error(f"오류 발생: {str(e)}")
-    st.info("데이터 파일을 확인해주세요.")
+    st.error(f"데이터를 읽어오는 중 오류가 발생했습니다. 파일명을 확인해주세요. 오류 메시지: {e}")
+    st.stop()
+
+# 3. 사이드바 - 대시보드 컨트롤 및 필터
+st.sidebar.title("🔍 대시보드 필터")
+st.sidebar.markdown("분석하고 싶은 종목을 선택하세요.")
+
+# 종목 리스트 추출 (결측치 제거)
+sport_column = "참여스포츠 및 종목"
+if sport_column in df.columns:
+    sports_list = ["전체 종목"] + sorted(df[sport_column].dropna().unique().tolist())
+else:
+    st.error(f"'{sport_column}' 컬럼을 찾을 수 없습니다. 데이터 컬럼을 확인해주세요.")
+    st.stop()
+
+selected_sport = st.sidebar.selectbox("🎯 스포츠 종목 선택", sports_list)
+
+# 데이터 필터링 규칙
+if selected_sport == "전체 종목":
+    filtered_df = df
+else:
+    filtered_df = df[df[sport_column] == selected_sport]
+
+# 4. 메인 화면 타이틀
+st.title("⛑️ 스포츠 안전사고 실태조사 대시보드 (체육인)")
+st.markdown(f"**현재 선택된 종목:** `{selected_sport}` | 데이터 기반 안전사고 패턴 분석 웹앱")
+st.hr()
+
+# 5. 핵심 지표 (Metrics) - 종목별 부상률 계산
+# '스포츠 활동 중 부상 당한 경험' 컬럼 분석 (예시: 1=경험 있음, 2=없음)
+injury_exp_col = "스포츠 활동 중 부상 당한 경험"
+
+if injury_exp_col in filtered_df.columns:
+    total_respondents = len(filtered_df)
+    # 데이터 값 유형에 따라 유연하게 카운트 (문자열 '1', 숫자 1, 혹은 '있음' 등 대응)
+    injured_count = len(filtered_df[filtered_df[injury_exp_col].astype(str).str.contains('1|있음|경험', na=False)])
+    
+    if total_respondents > 0:
+        injury_rate = (injured_count / total_respondents) * 100
+    else:
+        injury_rate = 0.0
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric(label="📊 총 응답자 수", value=f"{total_respondents:,} 명")
+    with col2:
+        st.metric(label="🤕 부상 경험자 수", value=f"{injured_count:,} 명")
+    with col3:
+        st.metric(label="📈 해당 그룹 부상률", value=f"{injury_rate:.1f} %")
+else:
+    st.warning("부상률 계산을 위한 '스포츠 활동 중 부상 당한 경험' 컬럼을 매핑할 수 없습니다.")
+
+st.markdown("### 📊 상세 통계 분석 그래프")
+
+# 부상 경험이 있는 데이터만 대상으로 시간대/장소 분석 진행
+injury_data = filtered_df[filtered_df[injury_exp_col].astype(str).str.contains('1|있음|경험', na=False)]
+
+if len(injury_data) == 0:
+    st.info("선택한 조건에 해당하는 부상 경험자 데이터가 없습니다.")
+else:
+    # 레이아웃 나누기 (왼쪽: 시간대, 오른쪽: 장소)
+    chart_col1, chart_col2 = st.columns(2)
+    
+    # --- [좌측: 부상이 잦은 시간대 분석] ---
+    with chart_col1:
+        st.subheader("⏰ 부상 발생 시간대 분포")
+        
+        # 방법 A: '새벽 시간대', '아침 시간대' 등 다중 컬럼이 존재할 경우 취합
+        time_cols = ["새벽 시간대", "아침 시간대", "오전 시간대", "점심 시간대", "오후 시간대", "저녁 시간대", "야간 시간대", "심야 시간대"]
+        existing_time_cols = [c for c in time_cols if c in df.columns]
+        
+        if existing_time_cols:
+            # 각 시간대별 체크된 빈도 계산 (보통 값이 들어가 있으면 선택된 것)
+            time_counts = injury_data[existing_time_cols].notna().sum().reset_index()
+            time_counts.columns = ['시간대', '부상 횟수']
+            
+            fig_time = px.bar(
+                time_counts, 
+                x='시간대', 
+                y='부상 횟수',
+                text='부상 횟수',
+                color='부상 횟수',
+                color_continuous_scale='Reds',
+                labels={'부상 횟수': '신고 건수'}
+            )
+            fig_time.update_traces(texttemplate='%{text}건', textposition='outside')
+            st.plotly_chart(fig_time, use_container_width=True)
+            
+        # 방법 B: 단일 '부상을 당한 시간' 컬럼이 존재할 경우 가동
+        elif "부상을 당한 시간" in injury_data.columns:
+            time_series = injury_data["부상을 당한 시간"].value_counts().reset_index()
+            time_series.columns = ['시간대', '부상 횟수']
+            
+            fig_time = px.bar(
+                time_series, x='시간대', y='부상 횟수',
+                color='부상 횟수', color_continuous_scale='Oranges'
+            )
+            st.plotly_chart(fig_time, use_container_width=True)
+        else:
+            st.info("시간대 분석용 컬럼을 매핑할 수 없습니다.")
+
+    # --- [우측: 부상이 자주 일어나는 장소 분석] ---
+    with chart_col2:
+        st.subheader("📍 부상 발생 장소 순위")
+        
+        place_col = "부상을 당한 장소(또는 시설)"
+        if place_col in injury_data.columns:
+            place_counts = injury_data[place_col].value_counts().reset_index()
+            place_counts.columns = ['장소/시설', '부상 횟수']
+            
+            # 데이터가 너무 많을 수 있으므로 상위 10개 장소만 시각화
+            place_counts_top10 = place_counts.head(10)
+            
+            fig_place = px.pie(
+                place_counts_top10, 
+                values='부상 횟수', 
+                names='장소/시설',
+                hole=0.4,
+                color_discrete_sequence=px.colors.sequential.RdBu_r
+            )
+            fig_place.update_traces(textinfo='percent+label')
+            st.plotly_chart(fig_place, use_container_width=True)
+        else:
+            st.info("'부상을 당한 장소(또는 시설)' 컬럼을 찾을 수 없습니다.")
+
+# 6. 하단 데이터 요약 보기
+st.hr()
+if st.checkbox("📁 필터링된 원본 데이터 일부 보기"):
+    st.dataframe(filtered_df.head(50))
