@@ -26,6 +26,7 @@ def load_and_clean_data():
         
         # 2. 타겟 컬럼 검색
         col_sports = None
+        col_time = None
         col_place = None
         
         for col in df.columns:
@@ -34,27 +35,26 @@ def load_and_clean_data():
                 break
         
         for col in df.columns:
-            if "부상" in col and "장소" in col:
+            if "부상" in col and "시간" in col:
+                col_time = col
+            elif "부상" in col and "장소" in col:
                 col_place = col
-                break
 
         if not col_sports:
             col_sports = [c for c in df.columns if "SQ2" in c or "종목" in c][0] if [c for c in df.columns if "SQ2" in c or "종목" in c] else df.columns[3]
+        if not col_time:
+            col_time = [c for c in df.columns if "시간" in c][0] if [c for c in df.columns if "시간" in c] else df.columns[4]
         if not col_place:
             col_place = [c for c in df.columns if "장소" in c][0] if [c for c in df.columns if "장소" in c] else df.columns[5]
 
-        # 3. [시간대 다중 응답 매핑 처리] - 597번째부터 604번째 열까지 안전 추출
-        # 설문지 행 1에서 실제 라벨('새벽 시간대', '오후 시간대' 등) 가져오기
-        time_cols_indices = range(597, 605)
-        time_cols = [df_raw.columns[i] for i in time_cols_indices]
-        time_labels = [str(df_raw.iloc[1, i]).strip() for i in time_cols_indices]
-        
-        # 기본 데이터 정제 및 변환
-        df_clean = df.copy()
+        # 3. 필요한 데이터 추출 및 숫자형 변환
+        df_clean = df[[col_sports, col_time, col_place]].copy()
         df_clean[col_sports] = pd.to_numeric(df_clean[col_sports], errors='coerce')
+        df_clean[col_time] = pd.to_numeric(df_clean[col_time], errors='coerce')
         df_clean[col_place] = pd.to_numeric(df_clean[col_place], errors='coerce')
+        df_clean = df_clean.dropna()
 
-        # 4. 맵 사전 정의
+        # 4. [GUIDE 참고] 문자열 터짐 방지를 위해 리스트 형태로 안전하게 정의 후 사전 변환
         raw_sports_list = [
             "가라테", "검도", "게이트볼", "골프(스크린골프 포함)", "국학기공",
             "궁도", "그라운드골프", "근대5종", "농구", "당구(포켓볼 포함)",
@@ -70,34 +70,46 @@ def load_and_clean_data():
             "택견", "테니스", "파크골프", "패러글라이딩(행글라이딩)", "펜싱",
             "핀수영", "하키(필드하키)", "합기도", "핸드볼", "없음"
         ]
-        sports_map = {i + 1: name for i, name in enumerate(raw_sports_list)}
         
+        # 1부터 시작하는 딕셔너리로 자동 빌드 (가로 짤림 에러 원천 차단)
+        sports_map = {i + 1: name for i, name in enumerate(raw_sports_list)}
+
+        # 시간대 매핑
+        time_map = {
+            1: "새벽 (06시 미만)",
+            2: "오전 (06시 ~ 12시 미만)",
+            3: "오후 (12시 ~ 18시 미만)",
+            4: "야간 (18시 ~ 24시 미만)",
+            5: "심야 (24시 ~ 06시 미만)"
+        }
+        
+        # 장소 매핑
         place_map = {
-            1: "공공 체육시설",
-            2: "민간 체육시설",
-            3: "학교 체육시설",
-            4: "자가 시설",
-            5: "자연 환경 (등산로, 강, 바다 등)",
+            1: "공공 체육시설 (지자체 운영 시설 등)",
+            2: "민간 체육시설 (헬스장, 수영장, 요가룸 등)",
+            3: "학교 체육시설 (초·중·고·대학교 운동장/체육관)",
+            4: "자가 시설 (집 내부, 아파트 단지 내 시설)",
+            5: "자연 환경 (등산로, 바다, 강, 야외 길거리)",
             6: "기타 장소"
         }
         
-        # 텍스트 명칭 치환
+        # 데이터 치환
         df_clean['스포츠종목'] = df_clean[col_sports].map(sports_map)
+        df_clean['부상시간'] = df_clean[col_time].map(time_map)
         df_clean['부상장소'] = df_clean[col_place].map(place_map)
         
-        # 유효 데이터 필터링
-        df_clean = df_clean.dropna(subset=['스포츠종목', '부상장소'])
+        # 매핑되지 않은 데이터 최종 정리
+        df_clean = df_clean.dropna(subset=['스포츠종목', '부상시간', '부상장소'])
         df_clean = df_clean[df_clean['스포츠종목'] != "없음"]
         
-        # 메인 가독성을 위해 시간대 매핑 정보와 다중 컬럼명 리스트를 함께 반환
-        return df_clean, col_sports, time_cols, time_labels
+        return df_clean, col_sports
         
     except Exception as e:
         st.error(f"데이터 정제 중 기술적 오류 발생: {e}")
-        return pd.DataFrame(), None, [], []
+        return pd.DataFrame(), None
 
 # 데이터 변환 함수 실행
-data, final_col_name, time_cols, time_labels = load_and_clean_data()
+data, final_col_name = load_and_clean_data()
 
 if not data.empty:
     # 사이드바 구성
@@ -131,17 +143,8 @@ if not data.empty:
     
     with col1:
         st.markdown("### 🕒 **부상이 빈번한 시간대**")
-        
-        # ★ 다중 선택 컬럼 집계 연산 파트 ★
-        time_counts_dict = {}
-        for col, label in zip(time_cols, time_labels):
-            # 체크되어 데이터가 존재하는 행의 개수를 집계
-            cnt = filtered_df[col].dropna().count()
-            time_counts_dict[label] = cnt
-            
-        time_counts = pd.DataFrame(list(time_counts_dict.items()), columns=['시간대', '부상 건수'])
-        
-        # 도넛 차트 시각화
+        time_counts = filtered_df['부상시간'].value_counts().reset_index()
+        time_counts.columns = ['시간대', '부상 건수']
         fig_time = px.pie(time_counts, values='부상 건수', names='시간대', hole=0.4,
                           color_discrete_sequence=px.colors.qualitative.Pastel)
         fig_time.update_traces(textinfo='percent+label')
@@ -150,3 +153,21 @@ if not data.empty:
     with col2:
         st.markdown("### 📍 **사고 위험이 높은 장소**")
         place_counts = filtered_df['부상장소'].value_counts().reset_index()
+        place_counts.columns = ['장소', '부상 건수']
+        fig_place = px.bar(place_counts, x='부상 건수', y='장소', orientation='h',
+                           color='부상 건수', color_continuous_scale='Blues', text_auto=True)
+        fig_place.update_layout(yaxis={'categoryorder':'total ascending'})
+        st.plotly_chart(fig_place, use_container_width=True)
+
+    # 하단 텍스트 자동 요약 브리핑
+    st.markdown("---")
+    st.subheader("💡 데이터 요약 안내")
+    total_count = len(filtered_df)
+    if total_count > 0:
+        st.info(
+            f"선택하신 **[{selected_sport}]** 데이터 분석 결과, 총 **{total_count:,}건**의 안전사고 사례가 확인되었습니다.\n\n"
+            f"• 부상이 가장 자주 발생하는 골든 타임은 **{filtered_df['부상시간'].mode()[0]}** 입니다.\n"
+            f"• 가장 각별히 안전 조치를 취해야 할 공간은 **{filtered_df['부상장소'].mode()[0]}** 입니다."
+        )
+else:
+    st.error("⚠️ 데이터를 불러오지 못했습니다. CSV 파일명이 정확한지 확인해 주세요.")
