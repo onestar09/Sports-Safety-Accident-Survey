@@ -58,7 +58,7 @@ def load_and_clean_data():
         df_clean[col_place] = pd.to_numeric(df_clean[col_place], errors='coerce')
         df_clean = df_clean.dropna()
 
-        # 4. [GUIDE 참고] 문자열 터짐 방지를 위해 리스트 형태로 안전하게 정의 후 사전 변환
+        # 4. 문자열 터짐 방지를 위해 리스트 형태로 안전하게 정의 후 사전 변환
         raw_sports_list = [
             "가라테", "검도", "게이트볼", "골프(스크린골프 포함)", "국학기공",
             "궁도", "그라운드골프", "근대5종", "농구", "당구(포켓볼 포함)",
@@ -75,34 +75,24 @@ def load_and_clean_data():
             "핀수영", "하키(필드하키)", "합기도", "핸드볼", "없음"
         ]
         
-        # 1부터 시작하는 딕셔너리로 자동 빌드
         sports_map = {i + 1: name for i, name in enumerate(raw_sports_list)}
 
-        # 시간대 매핑
         time_map = {
-            1: "새벽 (06시 미만)",
-            2: "오전 (06시 ~ 12시 미만)",
-            3: "오후 (12시 ~ 18시 미만)",
-            4: "야간 (18시 ~ 24시 미만)",
+            1: "새벽 (06시 미만)", 2: "오전 (06시 ~ 12시 미만)",
+            3: "오후 (12시 ~ 18시 미만)", 4: "야간 (18시 ~ 24시 미만)",
             5: "심야 (24시 ~ 06시 미만)"
         }
         
-        # 장소 매핑
         place_map = {
-            1: "공공 체육시설 (지자체 운영 시설 등)",
-            2: "민간 체육시설 (헬스장, 수영장, 요가룸 등)",
-            3: "학교 체육시설 (초·중·고·대학교 운동장/체육관)",
-            4: "자가 시설 (집 내부, 아파트 단지 내 시설)",
-            5: "자연 환경 (등산로, 바다, 강, 야외 길거리)",
-            6: "기타 장소"
+            1: "공공 체육시설 (지자체 운영 시설 등)", 2: "민간 체육시설 (헬스장, 수영장, 요가룸 등)",
+            3: "학교 체육시설 (초·중·고·대학교 운동장/체육관)", 4: "자가 시설 (집 내부, 아파트 단지 내 시설)",
+            5: "자연 환경 (등산로, 바다, 강, 야외 길거리)", 6: "기타 장소"
         }
         
-        # 데이터 치환
         df_clean['스포츠종목'] = df_clean[col_sports].map(sports_map)
         df_clean['부상시간'] = df_clean[col_time].map(time_map)
         df_clean['부상장소'] = df_clean[col_place].map(place_map)
         
-        # 매핑되지 않은 데이터 최종 정리
         df_clean = df_clean.dropna(subset=['스포츠종목', '부상시간', '부상장소'])
         df_clean = df_clean[df_clean['스포츠종목'] != "없음"]
         
@@ -112,18 +102,14 @@ def load_and_clean_data():
         st.error(f"데이터 정제 중 기술적 오류 발생: {e}")
         return pd.DataFrame(), None
 
-# 데이터 변환 함수 실행
 data, final_col_name = load_and_clean_data()
 
 if not data.empty:
-    # 사이드바 구성
     st.sidebar.header("🔍 대시보드 옵션")
     sports_list = ["전체 종목 보기"] + sorted(data['스포츠종목'].unique().tolist())
     selected_sport = st.sidebar.selectbox("종목 선택", sports_list)
 
-    # ----------------------------------------------------
-    # [추가] 사이드바 하단 개발 팀 정보 배치
-    # ----------------------------------------------------
+    # 👥 개발 팀 정보 노출 영역
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 👥 개발 팀 정보")
     st.sidebar.caption("👨‍💻 **유성우** (Data Engineer)")
@@ -135,18 +121,12 @@ if not data.empty:
     else:
         filtered_df = data
 
-    # ----------------------------------------------------
-    # 시각화 리포트 화면 구성
-    # ----------------------------------------------------
     if selected_sport == "전체 종목 보기":
         st.subheader("🏆 어떤 스포츠 종목에서 부상이 가장 많이 발생할까요? (Top 10)")
         top_sports = data['스포츠종목'].value_counts().head(10).reset_index()
         top_sports.columns = ['스포츠 종목', '부상 신고 건수']
-        
-        fig_sports = px.bar(
-            top_sports, x='부상 신고 건수', y='스포츠 종목', orientation='h',
-            color='부상 신고 건수', color_continuous_scale='Reds', text_auto=True
-        )
+        fig_sports = px.bar(top_sports, x='부상 신고 건수', y='스포츠 종목', orientation='h',
+                            color='부상 신고 건수', color_continuous_scale='Reds', text_auto=True)
         fig_sports.update_layout(yaxis={'categoryorder':'total ascending'})
         st.plotly_chart(fig_sports, use_container_width=True)
         st.markdown("---")
@@ -172,7 +152,6 @@ if not data.empty:
         fig_place.update_layout(yaxis={'categoryorder':'total ascending'})
         st.plotly_chart(fig_place, use_container_width=True)
 
-    # 하단 텍스트 자동 요약 브리핑
     st.markdown("---")
     st.subheader("💡 데이터 요약 안내")
     total_count = len(filtered_df)
@@ -183,15 +162,8 @@ if not data.empty:
             f"• 가장 각별히 안전 조치를 취해야 할 공간은 **{filtered_df['부상장소'].mode()[0]}** 입니다."
         )
         
-    # ----------------------------------------------------
-    # [추가] 화면 최하단 공통 푸터(Footer) 배치
-    # ----------------------------------------------------
+    # 하단 크레딧
     st.markdown("---")
-    st.markdown(
-        "<p style='text-align: center; color: gray; font-size: 0.85rem; margin-top: 20px;'>"
-        "© 2024 스포츠 안전사고 실태조사 분석 대시보드 | Developed by <b>유성우, 최한별, 박건</b>"
-        "</p>", 
-        unsafe_allow_html=True
-    )
+    st.markdown("<p style='text-align: center; color: gray; font-size: 0.85rem;'>© 2024 스포츠 안전사고 실태조사 분석 대시보드 | Developed by <b>유성우, 최한별, 박건</b></p>", unsafe_allow_html=True)
 else:
     st.error("⚠️ 데이터를 불러오지 못했습니다. CSV 파일명이 정확한지 확인해 주세요.")
