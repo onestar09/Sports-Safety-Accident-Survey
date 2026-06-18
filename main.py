@@ -6,7 +6,7 @@ import os
 st.set_page_config(page_title="2024 스포츠 안전사고 실태조사", layout="wide")
 
 st.title("📊 스포츠 안전사고 데이터 시각화 대시보드")
-st.markdown("설문지의 숫자 코드를 일반인들이 알기 쉬운 종목 명칭และ 항목들로 자동 변환하여 보여줍니다.")
+st.markdown("설문지의 숫자 코드를 일반인들이 알기 쉬운 종목 명칭과 항목들로 자동 변환하여 보여줍니다.")
 
 @st.cache_data
 def load_and_clean_data():
@@ -123,7 +123,7 @@ if not data.empty:
     sports_list = ["전체 종목 보기"] + sorted(data['스포츠종목'].unique().tolist())
     selected_sport = st.sidebar.selectbox("종목 선택", sports_list)
 
-    # 👥 [추가] 사이드바 하단 개발 팀 정보 배치
+    # 👥 사이드바 하단 개발 팀 정보 배치
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 👥 개발 팀 정보")
     st.sidebar.caption("👨‍💻 **유성우** (Data Engineer)")
@@ -154,21 +154,26 @@ if not data.empty:
     st.subheader(f"📊 {selected_sport} 부상 현황 정밀 분석")
     col1, col2 = st.columns(2)
     
-    # 🛠️ [수정 구간] 기존 부상시간 그래프만 부상 유형 통계 데이터 그래프로 치환 교체
+    # 🛠️ [수정 구간] 기존 파이 차트를 전체 부상 발생 건수에 대한 가로 막대(시간) 그래프로 변경
     with col1:
-        st.markdown("### 🤕 **부상 유형별 발생 현황 (총 460건)**")
+        st.markdown("### 🕒 **시간대별 전체 부상 발생 건수**")
+        time_counts = filtered_df['부상시간'].value_counts().reset_index()
+        time_counts.columns = ['시간대', '부상 발생 건수']
         
-        # 제공해주신 고정 통계 데이터 객체 선언
-        df_injury_type = pd.DataFrame({
-            "부상 유형": ["골절", "미끄러짐·넘어짐", "절단·동반", "뇌진탕", "기타"],
-            "발생 건수": [215, 121, 40, 24, 60]
-        })
+        # 새벽 -> 오전 -> 오후 -> 야간 -> 심야 순서로 보기 좋게 고정 정렬하기 위한 카테고리 순서 지정
+        time_order = ["새벽 (06시 미만)", "오전 (06시 ~ 12시 미만)", "오후 (12시 ~ 18시 미만)", "야간 (18시 ~ 24시 미만)", "심야 (24시 ~ 06시 미만)"]
+        time_counts['시간대'] = pd.Categorical(time_counts['시간대'], categories=time_order, ordered=True)
+        time_counts = time_counts.sort_values('시간대')
         
-        fig_time = px.pie(
-            df_injury_type, values='발생 건수', names='부상 유형', hole=0.4,
-            color_discrete_sequence=px.colors.sequential.Reds_r
+        fig_time = px.bar(
+            time_counts, x='부상 발생 건수', y='시간대', orientation='h',
+            color='부상 발생 건수', color_continuous_scale='Oranges', text_auto=True
         )
-        fig_time.update_traces(textinfo='percent+label')
+        fig_time.update_layout(
+            yaxis={'categoryorder':'array', 'categoryarray': time_order[::-1]}, # 시간 순서대로 아래서부터 위로 정렬
+            xaxis_title="총 부상 발생 건수 (건)",
+            yaxis_title="사고 발생 시간대"
+        )
         st.plotly_chart(fig_time, use_container_width=True)
         
     with col2:
@@ -185,14 +190,13 @@ if not data.empty:
     st.subheader("💡 데이터 요약 안내")
     total_count = len(filtered_df)
     if total_count > 0:
-        # 🛠️ [수정 구간] 하단 요약 안내 메시지도 부상 종류 통계에 맞추어 브리핑 스크립트 수정
         st.info(
             f"선택하신 **[{selected_sport}]** 데이터 분석 결과, 총 **{total_count:,}건**의 안전사고 사례가 확인되었습니다.\n\n"
-            f"• 전체 부상 유형 중 가장 치명적이고 빈번한 증상은 **골절 (215건, 46.7%)** 및 **미끄러짐·넘어짐 (121건, 26.3%)** 입니다.\n"
+            f"• 부상이 가장 집중적으로 발생하는 시간대는 **{filtered_df['부상시간'].mode()[0]}** 입니다.\n"
             f"• 가장 각별히 안전 조치를 취해야 할 공간은 **{filtered_df['부상장소'].mode()[0]}** 입니다."
         )
 
-    # 📜 [추가] 화면 최하단 공통 푸터(Footer) 크레딧 배치
+    # 📜 화면 최하단 공통 푸터(Footer) 크레딧 배치
     st.markdown("---")
     st.markdown(
         "<p style='text-align: center; color: gray; font-size: 0.85rem; margin-top: 20px;'>",
