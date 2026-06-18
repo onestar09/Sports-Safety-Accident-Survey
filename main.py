@@ -90,8 +90,7 @@ def load_and_clean_data():
             6: "기타 장소"
         }
         
-        # 1시간 단위 레이블 자동 생성 사전 (예: 1 -> 01시~02시 혹은 코드값 매핑)
-        # 설문 데이터가 1~24코드 형태이거나 실제 시간(0~23)일 경우를 대응하는 범용 텍스트 변환
+        # 1시간 단위 레이블 자동 생성 사전
         hourly_map = {}
         for hour in range(0, 25):
             hourly_map[hour] = f"{hour:02d}시 ~ {hour+1:02d}시"
@@ -151,7 +150,7 @@ if not data.empty:
     st.subheader(f"📊 {selected_sport} 부상 현황 정밀 분석")
     col1, col2 = st.columns(2)
     
-    # 🛠️ [수정 구간] 1시간마다 발생하는 건수의 비율을 나타내는 원그래프(Pie) 적용
+    # 🕒 1시간 마다 발생하는 건수의 비율을 나타내는 원그래프 (오타 수정 완료)
     with col1:
         st.markdown("### 🕒 **1시간 단위별 부상 발생 비율**")
         
@@ -165,10 +164,10 @@ if not data.empty:
         # 원그래프(도넛) 시각화 생성
         fig_time_pie = px.pie(
             hourly_counts, values='발생 건수', names='시간대', hole=0.4,
-            color_discrete_sequence=px.colors.qualitative.Muted
+            color_discrete_sequence=px.colors.qualitative.muted  # 소문자 'muted'로 교체 완료
         )
         # 그래프 내부 레이블에 퍼센트(비율)와 시간대 정보 동시 노출
-        fig_time_pie.update_traces(textinfo='percent+label', holdext=0.1)
+        fig_time_pie.update_traces(textinfo='percent+label')
         fig_time_pie.update_layout(
             legend_title_text="상세 시간대별 분류",
             margin=dict(l=20, r=20, t=20, b=20)
@@ -191,7 +190,7 @@ if not data.empty:
     if total_count > 0:
         st.info(
             f"선택하신 **[{selected_sport}]** 데이터 분석 결과, 총 **{total_count:,}건**의 안전사고 사례가 확인되었습니다.\n\n"
-            f"• 1시간 단위 비율 분석 결과, 사고가장 집중적으로 터지는 시간대는 **{filtered_df['상세부상시간'].mode()[0]}** 입니다.\n"
+            f"• 1시간 단위 비율 분석 결과, 사고가 가장 집중적으로 터지는 시간대는 **{filtered_df['상세부상시간'].mode()[0]}** 입니다.\n"
             f"• 가장 각별히 안전 조치를 취해야 할 공간은 **{filtered_df['부상장소'].mode()[0]}** 입니다."
         )
 
