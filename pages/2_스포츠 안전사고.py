@@ -1,193 +1,134 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import os
 
-st.set_page_config(page_title="2024 스포츠 안전사고 실태조사", layout="wide")
+st.set_page_config(page_title="2024 스포츠 및 일상 안전사고 실태조사 - 상세 분석", layout="wide")
 
-st.title("📊 스포츠 안전사고 데이터 시각화 대시보드")
-st.markdown("설문지의 숫자 코드를 일반인들이 알기 쉬운 종목 명칭과 항목들로 자동 변환하여 보여줍니다.")
+st.title("🏥 가정 내 안전사고 부상 데이터 분석 (2페이지)")
+st.markdown("집안 내부(거실, 주방 등)에서 주로 발생하는 부상 유형, 신체 손상 부위, 사고 공간별 발생 빈도를 정밀하게 분석합니다.")
 
 @st.cache_data
-def load_and_clean_data():
-    try:
-        # 🔍 파일명이 .csv 인지 .csv.csv 인지 자동으로 체크하여 존재하는 파일을 로드합니다.
-        file_name = "2024_스포츠_안전사고_실태조사_체육인.csv"
-        if not os.path.exists(file_name):
-            file_name = "2024_스포츠_안전사고_실태조사_체육인.csv.csv"
-            
-        # 1. 원본 데이터 로드 (헤더 병합 처리)
-        df_raw = pd.read_csv(file_name, header=None, low_memory=False)
-        
-        header_row1 = df_raw.iloc[0].fillna("").astype(str)
-        header_row2 = df_raw.iloc[1].fillna("").astype(str)
-        
-        combined_headers = []
-        for h1, h2 in zip(header_row1, header_row2):
-            full_header = (h1 + "_" + h2).strip("_").replace("\n", "").replace(" ", "")
-            combined_headers.append(full_header)
-            
-        df_raw.columns = combined_headers
-        df = df_raw.iloc[2:].reset_index(drop=True)
-        
-        # 2. 타겟 컬럼 검색
-        col_sports = None
-        col_place = None
-        
-        for col in df.columns:
-            if ("SQ2" in col or "종목" in col) and ("참여" in col or "주요" in col or "SQ2" in col):
-                col_sports = col
-                break
-        
-        for col in df.columns:
-            if "부상" in col and "장소" in col:
-                col_place = col
-
-        if not col_sports:
-            col_sports = [c for c in df.columns if "SQ2" in c or "종목" in c][0] if [c for c in df.columns if "SQ2" in c or "종목" in c] else df.columns[3]
-        if not col_place:
-            col_place = [c for c in df.columns if "장소" in c][0] if [c for c in df.columns if "장소" in c] else df.columns[5]
-
-        # 3. 필요한 데이터 추출 및 숫자형 변환
-        df_clean = df[[col_sports, col_place]].copy()
-        df_clean[col_sports] = pd.to_numeric(df_clean[col_sports], errors='coerce')
-        df_clean[col_place] = pd.to_numeric(df_clean[col_place], errors='coerce')
-        df_clean = df_clean.dropna()
-
-        # 4. 문자열 터짐 방지를 위해 리스트 형태로 안전하게 정의 후 사전 변환
-        raw_sports_list = [
-            "가라테", "검도", "게이트볼", "골프(스크린골프 포함)", "국학기공",
-            "궁도", "그라운드골프", "근대5종", "농구", "당구(포켓볼 포함)",
-            "댄스스포츠", "럭비", "레슬링", "롤러(인라인스케이트/하키 등)", "루지",
-            "바둑", "바이애슬론", "배구", "배드민턴", "보디빌딩(헬스)",
-            "복싱(권투)", "볼링", "봅슬레이/스켈레톤", "빙상(스케이트/피겨 등)", "사격",
-            "산악(등산, 클라이밍 등)", "세팍타크로", "소프트테니스(정구)", "수상스키/웨이크보드", 
-            "수영(수중발레, 다이빙, 수구 등)", "스쿼시", "스키/스노우보드", "승마", "씨름", 
-            "아이스하키", "야구/소프트볼", "양궁", "에어로빅", "역도", "요트",
-            "우슈", "유도", "육상(단거리/마라톤/조깅 등)", "자전거(사이클/MTB 등)", "조정",
-            "족구", "주짓수", "줄넘기", "철인3종(트라이애슬론)", "체조(맨손/생활체조 등)",
-            "축구", "카누", "컬링", "탁구", "태권도",
-            "택견", "테니스", "파크골프", "패러글라이딩(행글라이딩)", "펜싱",
-            "핀수영", "하키(필드하키)", "합기도", "핸드볼", "없음"
-        ]
-        
-        # 1부터 시작하는 딕셔너리로 자동 빌드
-        sports_map = {i + 1: name for i, name in enumerate(raw_sports_list)}
-        
-        # 장소 매핑
-        place_map = {
-            1: "공공 체육시설 (지자체 운영 시설 등)",
-            2: "민간 체육시설 (헬스장, 수영장, 요가룸 등)",
-            3: "학교 체육시설 (초·중·고·대학교 운동장/체육관)",
-            4: "자가 시설 (집 내부, 아파트 단지 내 시설)",
-            5: "자연 환경 (등산로, 바다, 강, 야외 길거리)",
-            6: "기타 장소"
-        }
-        
-        # 데이터 치환
-        df_clean['스포츠종목'] = df_clean[col_sports].map(sports_map)
-        df_clean['부상장소'] = df_clean[col_place].map(place_map)
-        
-        # 매핑되지 않은 데이터 최종 정리
-        df_clean = df_clean.dropna(subset=['스포츠종목', '부상장소'])
-        df_clean = df_clean[df_clean['스포츠종목'] != "없음"]
-        
-        return df_clean, col_sports
-        
-    except Exception as e:
-        st.error(f"데이터 정제 중 기술적 오류 발생: {e}")
-        return pd.DataFrame(), None
-
-# 데이터 변환 함수 실행
-data, final_col_name = load_and_clean_data()
-
-if not data.empty:
-    # 사이드바 구성
-    st.sidebar.header("🔍 대시보드 옵션")
-    sports_list = ["전체 종목 보기"] + sorted(data['스포츠종목'].unique().tolist())
-    selected_sport = st.sidebar.selectbox("종목 선택", sports_list)
-
-    # 👥 사이드바 하단 개발 팀 정보 배치
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### 👥 개발 팀 정보")
-    st.sidebar.caption("👨‍💻 **유성우** (Data Engineer)")
-    st.sidebar.caption("🎨 **최한별** (UI/UX Engineer)")
-    st.sidebar.caption("📊 **박건** (Data Visualization)")
-
-    if selected_sport != "전체 종목 보기":
-        filtered_df = data[data['스포츠종목'] == selected_sport]
-    else:
-        filtered_df = data
-
-    # ----------------------------------------------------
-    # 시각화 리포트 화면 구성
-    # ----------------------------------------------------
-    if selected_sport == "전체 종목 보기":
-        st.subheader("🏆 어떤 스포츠 종목에서 부상이 가장 많이 발생할까요? (Top 10)")
-        top_sports = data['스포츠종목'].value_counts().head(10).reset_index()
-        top_sports.columns = ['스포츠 종목', '부상 신고 건수']
-        
-        fig_sports = px.bar(
-            top_sports, x='부상 신고 건수', y='스포츠 종목', orientation='h',
-            color='부상 신고 건수', color_continuous_scale='Reds', text_auto=True
-        )
-        fig_sports.update_layout(yaxis={'categoryorder':'total ascending'})
-        st.plotly_chart(fig_sports, use_container_width=True)
-        st.markdown("---")
-
-    st.subheader(f"📊 {selected_sport} 부상 현황 정밀 분석")
-    col1, col2 = st.columns(2)
+def load_injury_detail_data():
+    """
+    제공된 정밀 분석 데이터를 기반으로 시각화용 데이터프레임을 생성합니다.
+    (총 발생 건수: 460건)
+    """
+    # 1. 부상 유형별 데이터
+    df_type = pd.DataFrame({
+        "부상 유형": ["골절", "미끄러짐·넘어짐", "절단·동반", "뇌진탕", "기타"],
+        "발생 건수": [215, 121, 40, 24, 60]
+    })
     
-    # 🛠️ [수정 구간] 기존 '부상시간(언제)' 파이 차트를 '부상 유형별 발생 현황'으로 대체 변경
-    with col1:
-        st.markdown("### 🤕 **주요 부상 유형별 발생 현황**")
-        
-        # 제공해주신 정제 데이터 적용 (총 460건)
-        injury_type_data = pd.DataFrame({
-            '부상 유형': ['골절', '미끄러짐·넘어짐', '절단·동반', '뇌진탕', '기타'],
-            '발생 건수': [215, 121, 40, 24, 60]
-        })
-        
-        fig_injury_type = px.pie(
-            injury_type_data, values='발생 건수', names='부상 유형', hole=0.4,
-            color_discrete_sequence=px.colors.sequential.Reds_r
-        )
-        fig_injury_type.update_traces(textinfo='percent+label')
-        st.plotly_chart(fig_injury_type, use_container_width=True)
-        
-    with col2:
-        st.markdown("### 📍 **사고 위험이 높은 장소**")
-        place_counts = filtered_df['부상장소'].value_counts().reset_index()
-        place_counts.columns = ['장소', '부상 건수']
-        fig_place = px.bar(place_counts, x='부상 건수', y='장소', orientation='h',
-                           color='부상 건수', color_continuous_scale='Blues', text_auto=True)
-        fig_place.update_layout(yaxis={'categoryorder':'total ascending'})
-        st.plotly_chart(fig_place, use_container_width=True)
+    # 2. 신체 손상 부위별 데이터
+    df_part = pd.DataFrame({
+        "신체 부위": ["손가락·발가락", "다리·발", "팔·손", "머리·얼굴", "몸통·기타"],
+        "발생 건수": [138, 114, 93, 61, 54]
+    })
+    
+    # 3. 사고 발생 공간별 데이터
+    df_space = pd.DataFrame({
+        "발생 공간": ["거실", "주방", "침실", "화장실·욕실", "기타"],
+        "발생 건수": [147, 110, 82, 69, 52]
+    })
+    
+    return df_type, df_part, df_space
 
-    # 🛠️ [수정 구간] 하단 텍스트 자동 요약 브리핑 내부 수정
-    st.markdown("---")
-    st.subheader("💡 데이터 요약 안내")
-    total_count = len(filtered_df)
-    if total_count > 0:
-        st.info(
-            f"선택하신 **[{selected_sport}]** 데이터 분석 결과, 총 **{total_count:,}건**의 안전사고 사례가 확인되었습니다.\n\n"
-            f"• 부상 유형 중 가장 높은 비율을 차지하며 주의가 필요한 증상은 **골절 (215건, 46.7%)** 입니다.\n"
-            f"• 가장 각별히 안전 조치를 취해야 할 공간은 **{filtered_df['부상장소'].mode()[0]}** 입니다."
-        )
+# 데이터 로드
+df_type, df_part, df_space = load_injury_detail_data()
 
-    # 📜 화면 최하단 공통 푸터(Footer) 크레딧 배치
-    st.markdown("---")
-    st.markdown(
-        "<p style='text-align: center; color: gray; font-size: 0.85rem; margin-top: 20px;'>",
-        unsafe_allow_html=True
-    )
-    st.markdown(
-        "© 2024 스포츠 안전사고 실태조사 분석 대시보드 | Developed by <b>유성우, 최한별, 박건</b>",
-        unsafe_allow_html=True
-    )
-    st.markdown(
-        "</p>",
-        unsafe_allow_html=True
-    )
-else:
-    st.error("⚠️ 데이터를 불러오지 못했습니다. GitHub 저장소에 CSV 파일이 실제로 업로드되어 있는지 확인해 주세요.")
+# 👥 사이드바에 개발 팀 정보 노출 (기존 스타일 유지)
+st.sidebar.markdown("### 👥 개발 팀 정보")
+st.sidebar.caption("👨‍💻 **유성우** (Data Engineer)")
+st.sidebar.caption("🎨 **최한별** (UI/UX Engineer)")
+st.sidebar.caption("📊 **박건** (Data Visualization)")
+
+# 탭 구조를 활용하여 화면을 깔끔하게 분할
+tab1, tab2, tab3 = st.tabs(["📊 부상 유형별", "🦵 신체 부위별", "🏠 발생 공간별"])
+
+# --- TAB 1: 부상 유형별 ---
+with tab1:
+    st.subheader("📌 어떤 부상이 가장 많이 발생했을까요?")
+    col1_1, col1_2 = st.columns([2, 1])
+    
+    with col1_1:
+        fig_type = px.bar(
+            df_type, x='발생 건수', y='부상 유형', orientation='h',
+            color='발생 건수', color_continuous_scale='Reds', text_auto=True
+        )
+        fig_type.update_layout(
+            yaxis={'categoryorder':'total ascending'},
+            xaxis_title="발생 건수 (건)",
+            yaxis_title="부상 유형",
+            height=400
+        )
+        st.plotly_chart(fig_type, use_container_width=True)
+        
+    with col1_2:
+        st.markdown("#### **📊 유형별 요약 통계**")
+        # 백분율 계산 후 테이블 노출
+        df_type_pct = df_type.copy()
+        df_type_pct['비중 (%)'] = (df_type_pct['발생 건수'] / df_type_pct['발생 건수'].sum() * 100).round(1)
+        st.dataframe(df_type_pct, use_container_width=True, hide_index=True)
+        st.caption("가장 큰 비중을 차지하는 부상은 **골절(46.7%)**이며, 미끄러짐·넘어짐이 그 뒤를 잇습니다.")
+
+# --- TAB 2: 신체 부위별 ---
+with tab2:
+    st.subheader("📌 어느 부위를 가장 많이 다쳤을까요?")
+    col2_1, col2_2 = st.columns([2, 1])
+    
+    with col2_1:
+        fig_part = px.bar(
+            df_part, x='발생 건수', y='신체 부위', orientation='h',
+            color='발생 건수', color_continuous_scale='Oranges', text_auto=True
+        )
+        fig_part.update_layout(
+            yaxis={'categoryorder':'total ascending'},
+            xaxis_title="발생 건수 (건)",
+            yaxis_title="신체 부위",
+            height=400
+        )
+        st.plotly_chart(fig_part, use_container_width=True)
+        
+    with col2_2:
+        st.markdown("#### **🦵 부위별 요약 통계**")
+        df_part_pct = df_part.copy()
+        df_part_pct['비중 (%)'] = (df_part_pct['발생 건수'] / df_part_pct['발생 건수'].sum() * 100).round(1)
+        st.dataframe(df_part_pct, use_container_width=True, hide_index=True)
+        st.caption("말단 부위인 **손가락·발가락(30.0%)** 및 **다리·발(24.8%)**의 부상 빈도가 매우 높습니다.")
+
+# --- TAB 3: 발생 공간별 ---
+with tab3:
+    st.subheader("📌 집안 어디에서 사고가 주로 일어났을까요?")
+    col3_1, col3_2 = st.columns([2, 1])
+    
+    with col3_1:
+        fig_space = px.bar(
+            df_space, x='발생 건수', y='발생 공간', orientation='h',
+            color='발생 건수', color_continuous_scale='Tealgrn', text_auto=True
+        )
+        fig_space.update_layout(
+            yaxis={'categoryorder':'total ascending'},
+            xaxis_title="발생 건수 (건)",
+            yaxis_title="사고 공간",
+            height=400
+        )
+        st.plotly_chart(fig_space, use_container_width=True)
+        
+    with col3_2:
+        st.markdown("#### **🏠 공간별 요약 통계**")
+        df_space_pct = df_space.copy()
+        df_space_pct['비중 (%)'] = (df_space_pct['발생 건수'] / df_space_pct['발생 건수'].sum() * 100).round(1)
+        st.dataframe(df_space_pct, use_container_width=True, hide_index=True)
+        st.caption("활동량이 많은 **거실(32.0%)**과 미끄러지기 쉬운 **주방(23.9%)**이 과반수 이상을 차지합니다.")
+
+# 💡 하단 종합 분석 인사이트 배너
+st.info(
+    "💡 **데이터 분석 종합 요약**\n\n"
+    "전체 460건의 데이터를 정밀 분석한 결과, 주로 **거실과 주방(합계 55.9%)** 공간에서 "
+    "**미끄러지거나 넘어짐(26.3%)**으로 인해 **손가락·발가락이나 다리(합계 54.8%)** 부위에 "
+    "**골절(46.7%)**을 입는 유형의 사고가 가장 치명적이고 높은 비중을 차지하고 있음을 알 수 있습니다."
+)
+
+# 하단 크레딧 (푸터) - 기존 1페이지 디자인 코드 통일
+st.markdown("---")
+st.markdown("<p style='text-align: center; color: gray; font-size: 0.85rem;'>© 2024 스포츠 및 일상 안전사고 실태조사 분석 대시보드 | Developed by <b>유성우, 최한별, 박건</b></p>", unsafe_allow_html=True)
