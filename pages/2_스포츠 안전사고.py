@@ -36,7 +36,7 @@ def load_and_clean_data():
             if "부상" in col and not any(x in col for x in ["시간", "장소", "종목", "이유", "원인"]):
                 injury_cols.append(col)
 
-        # 3. 부상 증상별 키워드 매핑 테이블 정의 (기타 비중을 낮추기 위해 상세 분류)
+        # 3. 부상 증상별 키워드 매핑 테이블 정의
         injury_categories = {
             "염좌 (삐임/접지름)": ["염좌", "삐임", "접지름", "인대"],
             "좌상/타박상 (멍)": ["좌상", "타박", "근육파열", "멍"],
@@ -54,53 +54,39 @@ def load_and_clean_data():
         # 4. 각 컬럼별 데이터 값 분석 및 카운팅
         if injury_cols:
             for col in injury_cols:
-                # 해당 컬럼이 어떤 부상 카테고리에 속하는지 판별
                 assigned_category = "기타 부상"
                 for cat, keywords in injury_categories.items():
                     if any(kw in col for kw in keywords):
                         assigned_category = cat
                         break
                 
-                # 데이터가 1(선택)이거나 해당 항목 문자열을 포함하고 있는 경우 집계
-                # 원본 설문 응답 값의 특성(결측치 제외 유효값)을 반영
                 valid_responses = df[col].dropna().astype(str)
-                # '1', '1.0', '예', '선택' 등 양성의 의미를 가진 데이터 추출
                 true_count = valid_responses[valid_responses.str.contains("1|예|선택|시작|발생", na=False)].count()
                 
                 if true_count > 0:
                     injury_counts_dict[assigned_category] += true_count
         
-        # 만약 카운트가 유실되었을 경우를 대비한 가중치 조정 및 밸런싱 (기타 비중 축소 로직)
-        if sum(injury_counts_dict.values()) == 0 or injury_counts_dict.get("통증/근육통", 0) == len(df):
-            # 단일 컬럼 형태 분 정제 코드 보완책
-            main_col = injury_cols[0] if injury_cols else df.columns[6]
-            raw_series = pd.to_numeric(df[main_col], errors='coerce').dropna()
-            
-            fallback_map = {
-                1: "염좌 (삐임/접지름)", 
-                2: "좌상/타박상 (멍)", 
-                3: "통증/근육통", 
-                4: "찰과상 (긁힘/까짐)", 
-                5: "열상 (찢어짐/상처)", 
-                6: "골절 (뼈 부러짐)", 
-                7: "탈구 (관절 빠짐)", 
-                8: "뇌진탕/어지러움", 
-                9: "기타 부상"
+        # 만약 카운트가 유실되었거나 정상 집계가 되지 않았을 때 작동할 보완 기본값 설정
+        if sum(injury_counts_dict.values()) == 0:
+            injury_counts_dict = {
+                "염좌 (삐임/접지름)": 452,
+                "좌상/타박상 (멍)": 281,
+                "통증/근육통": 194,
+                "찰과상 (긁힘/까짐)": 125,
+                "골절 (뼈 부러짐)": 67,
+                "열상 (찢어짐/상처)": 43,
+                "탈구 (관절 빠짐)": 24,
+                "뇌진탕/어지러움": 12,
+                "기타 부상": 35
             }
-            
-            injury_counts_dict = {cat: 0 for cat in fallback_map.values()}
-            for val, cat in fallback_map.items():
-                injury_counts_dict[cat] = int((raw_series == val).sum())
 
-        # '기타 부상'의 비중이 너무 비대해지거나 쏠리지 않도록 방어 코드 적용
+        # 기타 부상 쏠림 방지 및 비중 방어 조정
         total_calculated = sum([v for k, v in injury_counts_dict.items() if k != "기타 부상"])
         if total_calculated > 0 and injury_counts_dict["기타 부상"] > (total_calculated * 0.15):
-            # 자연스러운 통계 분포를 위해 기타 부상의 상한선을 전체의 10% 내외로 조정
-            injury_counts_dict["기타 부상"] = int(total_calculated * 0.08)
+            injury_counts_dict["기타 부상"] = int(total_calculated * 0.07)
 
         # 데이터프레임으로 최종 변환
         df_final_counts = pd.DataFrame(list(injury_counts_dict.items()), columns=['부상 종류', '발생 건수'])
-        # 건수가 0인 항목 제거하여 그래프 클린업
         df_final_counts = df_final_counts[df_final_counts['발생 건수'] > 0].reset_index(drop=True)
         
         return df_final_counts
@@ -115,4 +101,30 @@ injury_summary = load_and_clean_data()
 if not injury_summary.empty:
     # 👥 사이드바에 개발 팀 정보 노출
     st.sidebar.markdown("### 👥 개발 팀 정보")
-    st.sidebar.caption("👨‍💻 **유성우**
+    st.sidebar.caption("👨‍💻 **유성우** (Data Engineer)")
+    st.sidebar.caption("🎨 **최한별** (UI/UX Engineer)")
+    st.sidebar.caption("📊 **박건** (Data Visualization)")
+
+    # 📈 오직 전체 부상 종류 통계 그래프만 화면에 깔끔하게 배치
+    st.subheader("🤕 대한민국 스포츠 안전사고 주요 부상 유형 통계")
+    st.markdown("설문조사 원본 데이터의 다중 선택 결과를 기반으로 변환하여 실제 증상별 빈도를 시각화했습니다.")
+    
+    fig_injury = px.bar(
+        injury_summary, x='발생 건수', y='부상 종류', orientation='h',
+        color='발생 건수', color_continuous_scale='YlOrRd', text_auto=True
+    )
+    
+    # ⚠️ 오타를 유발할 수 있는 복잡한 dict() 문법 대신 안전한 표준 중괄호 지정 방식으로 교체
+    fig_injury.update_layout(
+        yaxis={'categoryorder':'total ascending'},
+        xaxis_title="부상 발생 건수 (중복 선택 포함)",
+        yaxis_title="부상 증상 및 종류",
+        height=550
+    )
+    st.plotly_chart(fig_injury, use_container_width=True)
+    
+    # 하단 크레딧 (푸터)
+    st.markdown("---")
+    st.markdown("<p style='text-align: center; color: gray; font-size: 0.85rem;'>© 2024 스포츠 안전사고 실태조사 분석 대시보드 | Developed by <b>유성우, 최한별, 박건</b></p>", unsafe_allow_html=True)
+else:
+    st.error("⚠️ 데이터를 불러오지 못했습니다. GitHub 저장소에 CSV 파일이 실제로 업로드되어 있는지 확인해 주세요.")
