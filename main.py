@@ -11,7 +11,7 @@ st.markdown("설문지의 숫자 코드를 일반인들이 알기 쉬운 종목 
 def load_and_clean_data():
     try:
         # 1. 원본 데이터 로드 (헤더 병합 처리)
-        df_raw = pd.read_csv("2024_스포츠_안전사고_실태조사_체육인.csv", header=None, low_memory=False)
+       df_raw = pd.read_csv("2024_스포츠_안전사고_실태조사_체육인.csv.csv", header=None, low_memory=False)
         
         header_row1 = df_raw.iloc[0].fillna("").astype(str)
         header_row2 = df_raw.iloc[1].fillna("").astype(str)
