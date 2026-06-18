@@ -31,10 +31,9 @@ def load_and_clean_data():
         col_place = None
         
         for col in df.columns:
-            # 주 종목 컬럼 찾기 (SQ2#1 등으로 시작하거나 참여스포츠/종목 키워드 포함)
             if ("SQ2" in col or "종목" in col) and ("참여" in col or "주요" in col or "SQ2" in col):
                 col_sports = col
-                break  # 대표 종목 하나를 타겟팅
+                break
         
         for col in df.columns:
             if "부상" in col and "시간" in col:
@@ -42,7 +41,6 @@ def load_and_clean_data():
             elif "부상" in col and "장소" in col:
                 col_place = col
 
-        # 만약 자동 검색에 실패했을 경우를 대비한 완전 무결 방어 코드 (위치 기준)
         if not col_sports:
             col_sports = [c for c in df.columns if "SQ2" in c or "종목" in c][0] if [c for c in df.columns if "SQ2" in c or "종목" in c] else df.columns[3]
         if not col_time:
@@ -57,14 +55,10 @@ def load_and_clean_data():
         df_clean[col_place] = pd.to_numeric(df_clean[col_place], errors='coerce')
         df_clean = df_clean.dropna()
 
-        # 4. [GUIDE 참고] 숫자 코드를 실제 한글 종목 이름으로 바꾸는 딕셔너리
+        # 4. [GUIDE 참고] 가독성과 안전성을 위해 여러 줄로 나누어 정의한 종목 딕셔너리
         sports_map = {
             1: "가라테", 2: "검도", 3: "게이트볼", 4: "골프(스크린골프 포함)", 5: "국학기공",
             6: "궁도", 7: "그라운드골프", 8: "근대5종", 9: "농구", 10: "당구(포켓볼 포함)",
             11: "댄스스포츠", 12: "럭비", 13: "레슬링", 14: "롤러(인라인스케이트/하키 등)", 15: "루지",
             16: "바둑", 17: "바이애슬론", 18: "배구", 19: "배드민턴", 20: "보디빌딩(헬스)",
-            21: "복싱(권투)", 22: "볼링", 23: "봅슬레이/스켈레톤", 24: "빙상(스케이트/피겨 등)", 25: "사격",
-            26: "산악(등산, 클라이밍 등)", 27: "세팍타크로", 28: "소프트테니스(정구)", 29: "수상스키/웨이크보드", 30: "수영(수중발레, 다이빙, 수구 등)",
-            31: "스쿼시", 32: "스키/스노우보드", 33: "승마", 34: "씨름", 35: "아이스하키",
-            36: "야구/소프트볼", 37: "양궁", 38: "에어로빅", 39: "역도", 40: "요트",
-            41: "우슈", 42: "유도", 43: "육상(단거리, 중거리, 마라톤, 조깅 등)", 44: "자전거(사이클, MTB 등
+            21: "복싱(권투)", 22: "볼링", 23: "봅슬레이/스켈레톤", 24: "빙상(스케이트/피겨 등)", 25: "사
