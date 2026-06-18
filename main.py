@@ -2,59 +2,60 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# 1. 페이지 기본 설정
-st.set_page_config(page_title="스포츠 안전사고 대시보드", layout="wide")
-st.title("📊 스포츠 안전사고 실태조사 데이터 대시보드")
+st.set_page_config(page_title="2024 스포츠 안전사고 실태조사", layout="wide")
+
+st.title("📊 스포츠 안전사고 데이터 시각화 대시보드")
+st.markdown("설문지의 숫자 코드를 일반인들이 알기 쉬운 종목 명칭과 항목들로 자동 변환하여 보여줍니다.")
 
 @st.cache_data
 def load_and_clean_data():
     try:
-        # 데이터 파일 로드
+        # 1. 원본 데이터 로드 (헤더 병합 처리)
         df_raw = pd.read_csv("2024_스포츠_안전사고_실태조사_체육인.csv", header=None, low_memory=False)
         
-        # 2줄 헤더 병합 처리
-        h1 = df_raw.iloc[0].fillna("").astype(str)
-        h2 = df_raw.iloc[1].fillna("").astype(str)
+        header_row1 = df_raw.iloc[0].fillna("").astype(str)
+        header_row2 = df_raw.iloc[1].fillna("").astype(str)
         
-        headers = []
-        for a, b in zip(h1, h2):
-            full = (a + "_" + b).strip("_").replace("\n", "").replace(" ", "")
-            headers.append(full)
+        combined_headers = []
+        for h1, h2 in zip(header_row1, header_row2):
+            full_header = (h1 + "_" + h2).strip("_").replace("\n", "").replace(" ", "")
+            combined_headers.append(full_header)
             
-        df_raw.columns = headers
+        df_raw.columns = combined_headers
         df = df_raw.iloc[2:].reset_index(drop=True)
         
-        # 컬럼 자동 검색
+        # 2. 타겟 컬럼 검색
         col_sports = None
+        col_time = None
         col_place = None
         
-        for c in df.columns:
-            if ("SQ2" in c or "종목" in c) and ("참여" in c or "주요" in c or "SQ2" in c):
-                col_sports = c
+        for col in df.columns:
+            if ("SQ2" in col or "종목" in col) and ("참여" in col or "주요" in col or "SQ2" in col):
+                col_sports = col
                 break
-        for c in df.columns:
-            if "부상" in c and "장소" in c:
-                col_place = c
-                break
+        
+        for col in df.columns:
+            if "부상" in col and "시간" in col:
+                col_time = col
+            elif "부상" in col and "장소" in col:
+                col_place = col
 
         if not col_sports:
-            col_sports = df.columns[3]
+            col_sports = [c for c in df.columns if "SQ2" in c or "종목" in c][0] if [c for c in df.columns if "SQ2" in c or "종목" in c] else df.columns[3]
+        if not col_time:
+            col_time = [c for c in df.columns if "시간" in c][0] if [c for c in df.columns if "시간" in c] else df.columns[4]
         if not col_place:
-            col_place = df.columns[5]
+            col_place = [c for c in df.columns if "장소" in c][0] if [c for c in df.columns if "장소" in c] else df.columns[5]
 
-        # 시간대 컬럼 및 부상 부위 컬럼 인덱스 정의
-        time_cols = [df_raw.columns[i] for i in range(597, 605)]
-        time_labels = [str(df_raw.iloc[1, i]).strip() for i in range(597, 605)]
-        
-        injury_cols = [df_raw.columns[i] for i in range(23, 61)]
-        injury_labels = [str(df_raw.iloc[1, i]).replace("부상 부위_", "").strip() for i in range(23, 61)]
-
-        df_clean = df.copy()
+        # 3. 필요한 데이터 추출 및 숫자형 변환
+        df_clean = df[[col_sports, col_time, col_place]].copy()
         df_clean[col_sports] = pd.to_numeric(df_clean[col_sports], errors='coerce')
+        df_clean[col_time] = pd.to_numeric(df_clean[col_time], errors='coerce')
         df_clean[col_place] = pd.to_numeric(df_clean[col_place], errors='coerce')
+        df_clean = df_clean.dropna()
 
-        # 데이터 매핑 딕셔너리 생성
-        raw_sports = [
+        # 4. [GUIDE 참고] 문자열 터짐 방지를 위해 리스트 형태로 안전하게 정의 후 사전 변환
+        raw_sports_list = [
             "가라테", "검도", "게이트볼", "골프(스크린골프 포함)", "국학기공",
             "궁도", "그라운드골프", "근대5종", "농구", "당구(포켓볼 포함)",
             "댄스스포츠", "럭비", "레슬링", "롤러(인라인스케이트/하키 등)", "루지",
@@ -70,116 +71,106 @@ def load_and_clean_data():
             "핀수영", "하키(필드하키)", "합기도", "핸드볼", "없음"
         ]
         
-        sports_map = {}
-        for idx, name in enumerate(raw_sports):
-            sports_map[idx + 1] = name
-            
-        place_map = {
-            1: "공공 체육시설", 2: "민간 체육시설", 3: "학교 체육시설",
-            4: "자가 시설", 5: "자연 환경", 6: "기타 장소"
+        # 1부터 시작하는 딕셔너리로 자동 빌드 (가로 짤림 에러 원천 차단)
+        sports_map = {i + 1: name for i, name in enumerate(raw_sports_list)}
+
+        # 시간대 매핑
+        time_map = {
+            1: "새벽 (06시 미만)",
+            2: "오전 (06시 ~ 12시 미만)",
+            3: "오후 (12시 ~ 18시 미만)",
+            4: "야간 (18시 ~ 24시 미만)",
+            5: "심야 (24시 ~ 06시 미만)"
         }
         
+        # 장소 매핑
+        place_map = {
+            1: "공공 체육시설 (지자체 운영 시설 등)",
+            2: "민간 체육시설 (헬스장, 수영장, 요가룸 등)",
+            3: "학교 체육시설 (초·중·고·대학교 운동장/체육관)",
+            4: "자가 시설 (집 내부, 아파트 단지 내 시설)",
+            5: "자연 환경 (등산로, 바다, 강, 야외 길거리)",
+            6: "기타 장소"
+        }
+        
+        # 데이터 치환
         df_clean['스포츠종목'] = df_clean[col_sports].map(sports_map)
+        df_clean['부상시간'] = df_clean[col_time].map(time_map)
         df_clean['부상장소'] = df_clean[col_place].map(place_map)
         
-        df_clean = df_clean.dropna(subset=['스포츠종목', '부상장소'])
+        # 매핑되지 않은 데이터 최종 정리
+        df_clean = df_clean.dropna(subset=['스포츠종목', '부상시간', '부상장소'])
         df_clean = df_clean[df_clean['스포츠종목'] != "없음"]
         
-        return df_clean, time_cols, time_labels, injury_cols, injury_labels
+        return df_clean, col_sports
         
     except Exception as e:
-        st.error(f"오류 발생: {e}")
-        return pd.DataFrame(), [], [], [], []
+        st.error(f"데이터 정제 중 기술적 오류 발생: {e}")
+        return pd.DataFrame(), None
 
-# 데이터 실행 및 반환
-data, time_cols, time_labels, injury_cols, injury_labels = load_and_clean_data()
+# 데이터 변환 함수 실행
+data, final_col_name = load_and_clean_data()
 
 if not data.empty:
-    # ----------------------------------------------------
-    # 사이드바 설정 (개발자 정보 추가 영역)
-    # ----------------------------------------------------
-    st.sidebar.header("⚙️ 옵션")
+    # 사이드바 구성
+    st.sidebar.header("🔍 대시보드 옵션")
     sports_list = ["전체 종목 보기"] + sorted(data['스포츠종목'].unique().tolist())
     selected_sport = st.sidebar.selectbox("종목 선택", sports_list)
-
-    # 사이드바 하단에 개발자 정보 깔끔하게 배치
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### 👥 개발 팀 정보")
-    st.sidebar.caption("👨‍💻 **유성우** (Data Engineer)")
-    st.sidebar.caption("🎨 **최한별** (UI/UX Engineer)")
-    st.sidebar.caption("📊 **박건** (Data Visualization)")
 
     if selected_sport != "전체 종목 보기":
         filtered_df = data[data['스포츠종목'] == selected_sport]
     else:
         filtered_df = data
 
-    # 탭 메뉴 분할
-    tab1, tab2 = st.tabs(["🏠 1페이지: 기본 현황", "🩹 2페이지: 부상 부위 비교"])
-
-    # 1페이지 영역
-    with tab1:
-        if selected_sport == "전체 종목 보기":
-            st.subheader("🏆 종목별 부상 발생 건수 (Top 10)")
-            top_sports = data['스포츠종목'].value_counts().head(10).reset_index()
-            top_sports.columns = ['스포츠 종목', '건수']
-            fig1 = px.bar(top_sports, x='건수', y='스포츠 종목', orientation='h', text_auto=True)
-            st.plotly_chart(fig1, use_container_width=True)
-            
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("### 🕒 부상 시간대")
-            t_dict = {}
-            for c, l in zip(time_cols, time_labels):
-                t_dict[l] = filtered_df[c].dropna().count()
-            t_df = pd.DataFrame(list(t_dict.items()), columns=['시간대', '건수'])
-            fig2 = px.pie(t_df, values='건수', names='시간대', hole=0.3)
-            st.plotly_chart(fig2, use_container_width=True)
-            
-        with col2:
-            st.markdown("### 📍 부상 장소")
-            p_df = filtered_df['부상장소'].value_counts().reset_index()
-            p_df.columns = ['장소', '건수']
-            fig3 = px.bar(p_df, x='건수', y='장소', orientation='h', text_auto=True)
-            st.plotly_chart(fig3, use_container_width=True)
-
-    # 2페이지 영역
-    with tab2:
-        st.subheader("🩹 신체 부위별 부상 발생 빈도 비교")
+    # ----------------------------------------------------
+    # 시각화 리포트 화면 구성
+    # ----------------------------------------------------
+    if selected_sport == "전체 종목 보기":
+        st.subheader("🏆 어떤 스포츠 종목에서 부상이 가장 많이 발생할까요? (Top 10)")
+        top_sports = data['스포츠종목'].value_counts().head(10).reset_index()
+        top_sports.columns = ['스포츠 종목', '부상 신고 건수']
         
-        injury_dict = {}
-        for c, l in zip(injury_cols, injury_labels):
-            if "내용" not in l:
-                injury_dict[l] = filtered_df[c].dropna().count()
-                
-        injury_df = pd.DataFrame(list(injury_dict.items()), columns=['부상 부위', '부상 건수'])
-        
-        # 비율 계산 및 정렬
-        total_cases = filtered_df[injury_cols].notnull().any(axis=1).sum()
-        if total_cases > 0:
-            injury_df['비율(%)'] = ((injury_df['부상 건수'] / total_cases) * 100).round(1)
-        else:
-            injury_df['비율(%)'] = 0.0
-            
-        injury_df = injury_df.sort_values(by='부상 건수', ascending=True).reset_index(drop=True)
-        top_injury = injury_df[injury_df['부상 건수'] > 0].tail(15)
-        
-        if not top_injury.empty:
-            c1, c2 = st.columns([3, 2])
-            with c1:
-                st.markdown("#### **📊 최다 부상 부위 비교 차트**")
-                fig4 = px.bar(top_injury, x='부상 건수', y='부상 부위', orientation='h', 
-                              text='비율(%)', color='부상 건수', color_continuous_scale='Oranges')
-                fig4.update_traces(texttemplate='%{text}%', textposition='outside')
-                st.plotly_chart(fig4, use_container_width=True)
-            with c2:
-                st.markdown("#### **📋 부상 순위 전체 데이터 통계**")
-                show_df = injury_df.sort_values(by='부상 건수', ascending=False).reset_index(drop=True)
-                show_df.index = show_df.index + 1
-                st.dataframe(show_df, use_container_width=True, height=400)
-        else:
-            st.info("해당 조건에 집계된 부상 부위 데이터가 없습니다.")
+        fig_sports = px.bar(
+            top_sports, x='부상 신고 건수', y='스포츠 종목', orientation='h',
+            color='부상 신고 건수', color_continuous_scale='Reds', text_auto=True
+        )
+        fig_sports.update_layout(yaxis={'categoryorder':'total ascending'})
+        st.plotly_chart(fig_sports, use_container_width=True)
+        st.markdown("---")
 
+    st.subheader(f"📊 {selected_sport} 부상 현황 정밀 분석")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("### 🕒 **부상이 빈번한 시간대**")
+        time_counts = filtered_df['부상시간'].value_counts().reset_index()
+        time_counts.columns = ['시간대', '부상 건수']
+        fig_time = px.pie(time_counts, values='부상 건수', names='시간대', hole=0.4,
+                          color_discrete_sequence=px.colors.qualitative.Pastel)
+        fig_time.update_traces(textinfo='percent+label')
+        st.plotly_chart(fig_time, use_container_width=True)
+        
+    with col2:
+        st.markdown("### 📍 **사고 위험이 높은 장소**")
+        place_counts = filtered_df['부상장소'].value_counts().reset_index()
+        place_counts.columns = ['장소', '부상 건수']
+        fig_place = px.bar(place_counts, x='부상 건수', y='장소', orientation='h',
+                           color='부상 건수', color_continuous_scale='Blues', text_auto=True)
+        fig_place.update_layout(yaxis={'categoryorder':'total ascending'})
+        st.plotly_chart(fig_place, use_container_width=True)
+
+    # 하단 텍스트 자동 요약 브리핑
+    st.markdown("---")
+    st.subheader("💡 데이터 요약 안내")
+    total_count = len(filtered_df)
+    if total_count > 0:
+        st.info(
+            f"선택하신 **[{selected_sport}]** 데이터 분석 결과, 총 **{total_count:,}건**의 안전사고 사례가 확인되었습니다.\n\n"
+            f"• 부상이 가장 자주 발생하는 골든 타임은 **{filtered_df['부상시간'].mode()[0]}** 입니다.\n"
+            f"• 가장 각별히 안전 조치를 취해야 할 공간은 **{filtered_df['부상장소'].mode()[0]}** 입니다."
+        )
+else:
+    st.error("⚠️ 데이터를 불러오지 못했습니다. CSV 파일명이 정확한지 확인해 주세요.")
     # ----------------------------------------------------
     # 대시보드 화면 맨 하단 푸터(Footer) 공통 배치
     # ----------------------------------------------------
