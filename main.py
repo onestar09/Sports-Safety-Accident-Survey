@@ -37,8 +37,12 @@ def load_and_clean_data():
         for col in df.columns:
             if "부상" in col and "시간" in col:
                 col_time = col
-            elif "부상" in col and "장소" in col:
+                break
+        
+        for col in df.columns:
+            if "부상" in col and "장소" in col:
                 col_place = col
+                break
 
         if not col_sports:
             col_sports = [c for c in df.columns if "SQ2" in c or "종목" in c][0] if [c for c in df.columns if "SQ2" in c or "종목" in c] else df.columns[3]
@@ -71,7 +75,7 @@ def load_and_clean_data():
             "핀수영", "하키(필드하키)", "합기도", "핸드볼", "없음"
         ]
         
-        # 1부터 시작하는 딕셔너리로 자동 빌드 (가로 짤림 에러 원천 차단)
+        # 1부터 시작하는 딕셔너리로 자동 빌드
         sports_map = {i + 1: name for i, name in enumerate(raw_sports_list)}
 
         # 시간대 매핑
@@ -116,6 +120,15 @@ if not data.empty:
     st.sidebar.header("🔍 대시보드 옵션")
     sports_list = ["전체 종목 보기"] + sorted(data['스포츠종목'].unique().tolist())
     selected_sport = st.sidebar.selectbox("종목 선택", sports_list)
+
+    # ----------------------------------------------------
+    # [추가] 사이드바 하단 개발 팀 정보 배치
+    # ----------------------------------------------------
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 👥 개발 팀 정보")
+    st.sidebar.caption("👨‍💻 **유성우** (Data Engineer)")
+    st.sidebar.caption("🎨 **최한별** (UI/UX Engineer)")
+    st.sidebar.caption("📊 **박건** (Data Visualization)")
 
     if selected_sport != "전체 종목 보기":
         filtered_df = data[data['스포츠종목'] == selected_sport]
@@ -169,19 +182,16 @@ if not data.empty:
             f"• 부상이 가장 자주 발생하는 골든 타임은 **{filtered_df['부상시간'].mode()[0]}** 입니다.\n"
             f"• 가장 각별히 안전 조치를 취해야 할 공간은 **{filtered_df['부상장소'].mode()[0]}** 입니다."
         )
-else:
-    st.error("⚠️ 데이터를 불러오지 못했습니다. CSV 파일명이 정확한지 확인해 주세요.")
-   
+        
     # ----------------------------------------------------
-    # 대시보드 화면 맨 하단 푸터(Footer) 공통 배치
+    # [추가] 화면 최하단 공통 푸터(Footer) 배치
     # ----------------------------------------------------
     st.markdown("---")
-    st.center = st.markdown(
-        "<p style='text-align: center; color: gray; font-size: 0.8rem;'>"
-        "© 2024 스포츠 안전사고 실태조사 분석 대시보드 | Developed by 유성우, 최한별, 박건"
+    st.markdown(
+        "<p style='text-align: center; color: gray; font-size: 0.85rem; margin-top: 20px;'>"
+        "© 2024 스포츠 안전사고 실태조사 분석 대시보드 | Developed by <b>유성우, 최한별, 박건</b>"
         "</p>", 
         unsafe_allow_html=True
     )
-
 else:
-    st.error("데이터 파일 로드에 실패했습니다. 경로와 파일명을 확인해 주세요.")
+    st.error("⚠️ 데이터를 불러오지 못했습니다. CSV 파일명이 정확한지 확인해 주세요.")
