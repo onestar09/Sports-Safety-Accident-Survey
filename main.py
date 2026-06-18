@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import os
 
 st.set_page_config(page_title="2024 스포츠 안전사고 실태조사", layout="wide")
 
@@ -10,8 +11,13 @@ st.markdown("설문지의 숫자 코드를 일반인들이 알기 쉬운 종목 
 @st.cache_data
 def load_and_clean_data():
     try:
-        # 1. 원본 데이터 로드 (.csv.csv 파일 구조 자동 반영 및 헤더 병합 처리)
-        df_raw = pd.read_csv("2024_스포츠_안전사고_실태조사_체육인.csv.csv", header=None, low_memory=False)
+        # 🔍 파일명이 .csv 인지 .csv.csv 인지 자동으로 체크하여 존재하는 파일을 로드합니다.
+        file_name = "2024_스포츠_안전사고_실태조사_체육인.csv"
+        if not os.path.exists(file_name):
+            file_name = "2024_스포츠_안전사고_실태조사_체육인.csv.csv"
+            
+        # 1. 원본 데이터 로드 (헤더 병합 처리)
+        df_raw = pd.read_csv(file_name, header=None, low_memory=False)
         
         header_row1 = df_raw.iloc[0].fillna("").astype(str)
         header_row2 = df_raw.iloc[1].fillna("").astype(str)
@@ -166,4 +172,4 @@ if not data.empty:
     st.markdown("---")
     st.markdown("<p style='text-align: center; color: gray; font-size: 0.85rem;'>© 2024 스포츠 안전사고 실태조사 분석 대시보드 | Developed by <b>유성우, 최한별, 박건</b></p>", unsafe_allow_html=True)
 else:
-    st.error("⚠️ 데이터를 불러오지 못했습니다. CSV 파일명이 정확한지 확인해 주세요.")
+    st.error("⚠️ 데이터를 불러오지 못했습니다. GitHub 저장소에 CSV 파일이 실제로 업로드되어 있는지 확인해 주세요.")
