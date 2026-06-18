@@ -6,7 +6,7 @@ import os
 st.set_page_config(page_title="2024 스포츠 안전사고 실태조사", layout="wide")
 
 st.title("📊 스포츠 안전사고 분석 리포트")
-st.markdown("선택한 스포츠 종목의 부상 시간대와 사고 위험 장소를 상세하게 분석합니다.")
+st.markdown("선택한 스포츠 종목의 부상 시간대, 사고 위험 장소 및 주요 부상 유형을 상세하게 분석합니다.")
 
 @st.cache_data
 def load_and_clean_data():
@@ -30,10 +30,11 @@ def load_and_clean_data():
         df_raw.columns = combined_headers
         df = df_raw.iloc[2:].reset_index(drop=True)
         
-        # 2. 타겟 컬럼 검색
+        # 2. 타겟 컬럼 검색 (종목, 시간, 장소, 부상 부위/종류)
         col_sports = None
         col_time = None
         col_place = None
+        col_injury = None
         
         for col in df.columns:
             if ("SQ2" in col or "종목" in col) and ("참여" in col or "주요" in col or "SQ2" in col):
@@ -45,6 +46,8 @@ def load_and_clean_data():
                 col_time = col
             elif "부상" in col and "장소" in col:
                 col_place = col
+            elif "부상" in col and ("부위" in col or "종류" in col or "증상" in col):
+                col_injury = col
 
         if not col_sports:
             col_sports = [c for c in df.columns if "SQ2" in c or "종목" in c][0] if [c for c in df.columns if "SQ2" in c or "종목" in c] else df.columns[3]
@@ -52,15 +55,20 @@ def load_and_clean_data():
             col_time = [c for c in df.columns if "시간" in c][0] if [c for c in df.columns if "시간" in c] else df.columns[4]
         if not col_place:
             col_place = [c for c in df.columns if "장소" in c][0] if [c for c in df.columns if "장소" in c] else df.columns[5]
+        if not col_injury:
+            # 부상 부위/종류 컬럼 후보 자동 선택
+            injury_candidates = [c for c in df.columns if "부상" in c and ("부위" in c or "종류" in c or "증상" in c)]
+            col_injury = injury_candidates[0] if injury_candidates else df.columns[6]
 
         # 3. 필요한 데이터 추출 및 숫자형 변환
-        df_clean = df[[col_sports, col_time, col_place]].copy()
+        df_clean = df[[col_sports, col_time, col_place, col_injury]].copy()
         df_clean[col_sports] = pd.to_numeric(df_clean[col_sports], errors='coerce')
         df_clean[col_time] = pd.to_numeric(df_clean[col_time], errors='coerce')
         df_clean[col_place] = pd.to_numeric(df_clean[col_place], errors='coerce')
+        df_clean[col_injury] = pd.to_numeric(df_clean[col_injury], errors='coerce')
         df_clean = df_clean.dropna()
 
-        # 4. 종목 리스트 정의
+        # 4. 매핑 리스트 정의
         raw_sports_list = [
             "가라테", "검도", "게이트볼", "골프(스크린골프 포함)", "국학기공",
             "궁도", "그라운드골프", "근대5종", "농구", "당구(포켓볼 포함)",
@@ -90,12 +98,20 @@ def load_and_clean_data():
             3: "학교 체육시설 (초·중·고·대학교 운동장/체육관)", 4: "자가 시설 (집 내부, 아파트 단지 내 시설)",
             5: "자연 환경 (등산로, 바다, 강, 야외 길거리)", 6: "기타 장소"
         }
+
+        # 설문지 기준 대표적인 부상 증상/종류 매핑 (데이터셋 표준 준수)
+        injury_map = {
+            1: "통증/근육통", 2: "염좌 (삐임/접지름)", 3: "좌상/타박상 (멍)",
+            4: "찰과상 (긁힘/까짐)", 5: "열상 (찢어짐/상처)", 6: "골절 (뼈 부러짐)",
+            7: "탈구 (관절 빠짐)", 8: "뇌진탕/어지러움", 9: "기타 부상"
+        }
         
         df_clean['스포츠종목'] = df_clean[col_sports].map(sports_map)
         df_clean['부상시간'] = df_clean[col_time].map(time_map)
         df_clean['부상장소'] = df_clean[col_place].map(place_map)
+        df_clean['부상종류'] = df_clean[col_injury].map(injury_map)
         
-        df_clean = df_clean.dropna(subset=['스포츠종목', '부상시간', '부상장소'])
+        df_clean = df_clean.dropna(subset=['스포츠종목', '부상시간', '부상장소', '부상종류'])
         df_clean = df_clean[df_clean['스포츠종목'] != "없음"]
         
         return df_clean, col_sports
@@ -156,19 +172,20 @@ if not data.empty:
             fig_place.update_layout(yaxis={'categoryorder':'total ascending'})
             st.plotly_chart(fig_place, use_container_width=True)
 
+        # ✨ [수정 파트] 요약 텍스트 안내 영역을 완전히 없애고 부상 종류 그래프 배치
         st.markdown("---")
-        st.subheader("💡 데이터 요약 안내")
-        total_count = len(filtered_df)
+        st.subheader("🤕 가장 많이 발생하는 부상 유형 및 종류")
         
-        # ⚠️ 에러 원인이었던 정렬 부분을 안전한 모드(.mode()) 연산으로 전면 교체
-        highest_time = filtered_df['부상시간'].mode()[0] if not filtered_df['부상시간'].empty else "데이터 없음"
-        highest_place = filtered_df['부상장소'].mode()[0] if not filtered_df['부상장소'].empty else "데이터 없음"
+        injury_counts = filtered_df['부상종류'].value_counts().reset_index()
+        injury_counts.columns = ['부상 종류', '발생 건수']
         
-        st.info(
-            f"선택하신 **[{selected_sport}]** 데이터 분석 결과, 총 **{total_count:,}건**의 안전사고 사례가 확인되었습니다.\n\n"
-            f"• 부상이 가장 자주 발생하는 골든 타임은 **{highest_time}** 입니다.\n"
-            f"• 가장 각별히 안전 조치를 취해야 할 공간은 **{highest_place}** 입니다."
+        fig_injury = px.bar(
+            injury_counts, x='발생 건수', y='부상 종류', orientation='h',
+            color='발생 건수', color_continuous_scale='Oranges', text_auto=True
         )
+        fig_injury.update_layout(yaxis={'categoryorder':'total ascending'})
+        st.plotly_chart(fig_injury, use_container_width=True)
+
     else:
         st.warning(f"⚠️ 선택하신 [{selected_sport}] 종목은 등록된 안전사고 데이터가 없습니다.")
         
@@ -176,4 +193,4 @@ if not data.empty:
     st.markdown("---")
     st.markdown("<p style='text-align: center; color: gray; font-size: 0.85rem;'>© 2024 스포츠 안전사고 실태조사 분석 대시보드 | Developed by <b>유성우, 최한별, 박건</b></p>", unsafe_allow_html=True)
 else:
-    st.error("⚠️ 데이터를 불러오지 못했습니다. GitHub 저장소에 CSV 파일이 실제로 업로드되어 있는지 확인해 주세요
+    st.error("⚠️ 데이터를 불러오지 못했습니다. GitHub 저장소에 CSV 파일이 실제로 업로드되어 있는지 확인해 주세요.")
